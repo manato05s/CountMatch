@@ -174,6 +174,8 @@ tr:hover td{background:var(--surface2)}
     <div class="sg" id="sg"></div>
     <div class="tabs" id="rtabs"></div>
     <div class="tc">
+      <button class="btn btg" id="selall" style="padding:6px 10px;font-size:12px">全選択</button>
+      <button class="btn btg" id="selnone" style="padding:6px 10px;font-size:12px">全解除</button>
       <input class="si2" type="text" id="srch" placeholder="商品名・JANコードで絞り込み...">
       <span class="rc" id="rc"></span>
     </div>
@@ -181,6 +183,7 @@ tr:hover td{background:var(--surface2)}
     <div class="br">
       <button class="btn btg" id="bbm">← 設定に戻る</button>
       <button class="btn bts" id="bdl">Excel ダウンロード（シート分け）</button>
+      <button class="btn btp" id="bdlsel">選択項目のみExcel抽出</button>
       <button class="btn btg" id="brst">最初からやり直す</button>
     </div>
   </div>
@@ -208,7 +211,7 @@ if(xr(e,"index.xml"))throw new Error("Unsupported NUMBERS 09 file");throw new Er
 </script>
 <script>
 (function(){"use strict";
-const S={sm:null,ac:null,res:null,tab:'all',q:''};
+const S={sm:null,ac:null,res:null,sel:new Set(['minus','excess','short','match','other']),q:''};
 
 // Theme
 const tbtn=document.getElementById('tbtn');
@@ -292,32 +295,34 @@ document.getElementById('bpr').addEventListener('click',()=>{
 });
 
 // Results
-const TABS=[
-  {id:'all',l:'全商品',bc:'bn',f:r=>true},
-  {id:'minus',l:'マイナス品',bc:'bd',f:r=>r.type==='minus'},
-  {id:'excess',l:'実数多',bc:'ba',f:r=>r.type==='excess'},
-  {id:'short',l:'実数少',bc:'bd',f:r=>r.type==='short'},
-  {id:'match',l:'一致品',bc:'bs',f:r=>r.type==='match'},
-  {id:'other',l:'その他',bc:'bn',f:r=>['noactual','nosmaregi','nodata'].includes(r.type)},
+const CATS=[
+  {id:'minus',l:'マイナス品',bc:'bd'},
+  {id:'excess',l:'実数多',bc:'ba'},
+  {id:'short',l:'実数少',bc:'bd'},
+  {id:'match',l:'一致品',bc:'bs'},
+  {id:'other',l:'その他',bc:'bn'},
 ];
 const TL={match:'一致',minus:'マイナス品',excess:'実数多',short:'実数少',noactual:'実棚なし',nosmaregi:'スマレジ未登録',nodata:'データなし'};
 const TP={match:'pm',minus:'pmi',excess:'pe',short:'ps',noactual:'pn',nosmaregi:'pn',nodata:'pn'};
+function catOf(t){return(t==='minus'||t==='excess'||t==='short'||t==='match')?t:'other'}
 
 function renderResults(res){
   const c={all:res.length,minus:0,excess:0,short:0,match:0,other:0};
   res.forEach(r=>{if(r.type==='minus')c.minus++;else if(r.type==='excess')c.excess++;else if(r.type==='short')c.short++;else if(r.type==='match')c.match++;else c.other++});
   document.getElementById('sg').innerHTML=`<div class="sc sn2"><div class="sl">全商品</div><div class="sv">${c.all}</div></div><div class="sc sd"><div class="sl">マイナス品</div><div class="sv">${c.minus}</div></div><div class="sc sa"><div class="sl">実数多</div><div class="sv">${c.excess}</div></div><div class="sc sd"><div class="sl">実数少</div><div class="sv">${c.short}</div></div><div class="sc ss"><div class="sl">一致品</div><div class="sv">${c.match}</div></div>`;
   document.getElementById('rsub').textContent='全'+c.all+'件 — 不一致 '+(c.minus+c.excess+c.short+c.other)+'件 / 一致 '+c.match+'件';
-  const tc={all:c.all,minus:c.minus,excess:c.excess,short:c.short,match:c.match,other:c.other};
+  const tc={minus:c.minus,excess:c.excess,short:c.short,match:c.match,other:c.other};
   const te=document.getElementById('rtabs');
-  te.innerHTML=TABS.map(t=>`<button class="tb ${S.tab===t.id?'active':''}" data-tab="${t.id}">${t.l}<span class="badge ${t.bc}">${tc[t.id]}</span></button>`).join('');
-  te.querySelectorAll('.tb').forEach(b=>{b.addEventListener('click',()=>{S.tab=b.dataset.tab;te.querySelectorAll('.tb').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderTable()})});
+  te.innerHTML=CATS.map(t=>`<button class="tb ${S.sel.has(t.id)?'active':''}" data-cat="${t.id}">${S.sel.has(t.id)?'✓ ':''}${t.l}<span class="badge ${t.bc}">${tc[t.id]}</span></button>`).join('');
+  te.querySelectorAll('.tb').forEach(b=>{b.addEventListener('click',()=>{const id=b.dataset.cat;if(S.sel.has(id))S.sel.delete(id);else S.sel.add(id);renderResults(S.res)})});
   renderTable();
 }
+document.getElementById('selall').addEventListener('click',()=>{if(!S.res)return;S.sel=new Set(CATS.map(c=>c.id));renderResults(S.res)});
+document.getElementById('selnone').addEventListener('click',()=>{if(!S.res)return;S.sel=new Set();renderResults(S.res)});
 
 function renderTable(){
-  const tab=TABS.find(t=>t.id===S.tab)||TABS[0];const q=S.q.toLowerCase();
-  let rows=S.res.filter(tab.f);if(q)rows=rows.filter(r=>(r.name+r.jan).toLowerCase().includes(q));
+  const q=S.q.toLowerCase();
+  let rows=S.res.filter(r=>S.sel.has(catOf(r.type)));if(q)rows=rows.filter(r=>(r.name+r.jan).toLowerCase().includes(q));
   document.getElementById('rc').textContent=rows.length+'件';
   document.getElementById('rth').innerHTML='<tr><th>商品名（スマレジ）</th><th>JANコード</th><th class="cn">スマレジ在庫数</th><th class="cn">実際の個数</th><th>状態</th><th class="cn">ズレ（実-スマ）</th></tr>';
   const tb=document.getElementById('rtb');
@@ -332,12 +337,13 @@ function renderTable(){
 document.getElementById('srch').addEventListener('input',e=>{S.q=e.target.value;renderTable()});
 
 // Download
+const XH=['商品名（スマレジ）','JANコード','スマレジ在庫数','実際の個数','状態','ズレ（実-スマ）'];
+const XC=[{wch:32},{wch:16},{wch:14},{wch:14},{wch:14},{wch:12}];
+function xrow(r){return[r.name,r.jan,r.sq===-Infinity?'-':(r.sq===null?'':r.sq),r.actq===null?'':r.actq,TL[r.type]||r.type,r.diff===null?'':r.diff]}
 document.getElementById('bdl').addEventListener('click',()=>{
   if(!S.res)return;
   const wb=XLSX.utils.book_new();
-  const H=['商品名（スマレジ）','JANコード','スマレジ在庫数','実際の個数','状態','ズレ（実-スマ）'];
-  const C=[{wch:32},{wch:16},{wch:14},{wch:14},{wch:14},{wch:12}];
-  function ta(r){return[r.name,r.jan,r.sq===-Infinity?'-':(r.sq===null?'':r.sq),r.actq===null?'':r.actq,TL[r.type]||r.type,r.diff===null?'':r.diff]}
+  const H=XH,C=XC,ta=xrow;
   function as(name,rows){const ws=XLSX.utils.aoa_to_sheet([H,...rows.map(ta)]);ws['!cols']=C;XLSX.utils.book_append_sheet(wb,ws,name)}
   as('全商品一覧',S.res);
   as('マイナス品（スマレジ-）',S.res.filter(r=>r.type==='minus'));
@@ -348,10 +354,23 @@ document.getElementById('bdl').addEventListener('click',()=>{
   const d=new Date();const st=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
   XLSX.writeFile(wb,`在庫照合結果_${st}.xlsx`);toast('Excelをダウンロードしました');
 });
+document.getElementById('bdlsel').addEventListener('click',()=>{
+  if(!S.res)return;
+  const q=S.q.toLowerCase();
+  let rows=S.res.filter(r=>S.sel.has(catOf(r.type)));
+  if(q)rows=rows.filter(r=>(r.name+r.jan).toLowerCase().includes(q));
+  if(!rows.length){toast('抽出対象のデータがありません（選択項目を確認してください）');return}
+  const label=CATS.filter(c=>S.sel.has(c.id)).map(c=>c.l).join('・')||'選択項目';
+  const wb=XLSX.utils.book_new();
+  const ws=XLSX.utils.aoa_to_sheet([XH,...rows.map(xrow)]);ws['!cols']=XC;
+  XLSX.utils.book_append_sheet(wb,ws,label.slice(0,31));
+  const d=new Date();const st=`${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}`;
+  XLSX.writeFile(wb,`在庫照合結果_選択項目_${st}.xlsx`);toast('選択項目（'+rows.length+'件）をExcelでダウンロードしました');
+});
 
 document.getElementById('bbm').addEventListener('click',()=>panel('pm'));
 document.getElementById('brst').addEventListener('click',()=>{
-  S.sm=null;S.ac=null;S.res=null;S.tab='all';S.q='';
+  S.sm=null;S.ac=null;S.res=null;S.sel=new Set(['minus','excess','short','match','other']);S.q='';
   ['dz1','dz2'].forEach(id=>document.getElementById(id).classList.remove('loaded'));
   ['i1','i2'].forEach(id=>document.getElementById(id).style.display='none');
   ['f1','f2'].forEach(id=>document.getElementById(id).value='');
