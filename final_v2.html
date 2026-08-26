@@ -244,7 +244,8 @@ function panel(id){
 }
 
 // File
-function readWB(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{res(XLSX.read(new Uint8Array(e.target.result),{type:'array',cellText:true,cellDates:true}))}catch(err){rej(err)}};r.onerror=rej;r.readAsArrayBuffer(file)})}
+function decodeText(buf){const bytes=new Uint8Array(buf);const off=(bytes.length>=3&&bytes[0]===0xEF&&bytes[1]===0xBB&&bytes[2]===0xBF)?3:0;try{return new TextDecoder('utf-8',{fatal:true}).decode(bytes.subarray(off))}catch(e){return new TextDecoder('shift_jis').decode(bytes)}}
+function readWB(file){return new Promise((res,rej)=>{const r=new FileReader();r.onload=e=>{try{const buf=e.target.result;if(/\.csv$/i.test(file.name)){res(XLSX.read(decodeText(buf),{type:'string',raw:false,cellDates:true}))}else{res(XLSX.read(new Uint8Array(buf),{type:'array',cellText:true,cellDates:true}))}}catch(err){rej(err)}};r.onerror=rej;r.readAsArrayBuffer(file)})}
 function sd(wb,hr){const ws=wb.Sheets[wb.SheetNames[0]];const all=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});const h=Math.max(1,hr||1);return{headers:(all[h-1]||[]).map(String),rows:all.slice(h).filter(r=>r.some(c=>c!==''))}}
 
 function setupDZ(dzId,fId,iId,cb){
